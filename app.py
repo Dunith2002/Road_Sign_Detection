@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from keras.models import load_model
 from PIL import Image
+from collections import deque, Counter  # ✅ NEW IMPORT ADDED
 
 # 1. Load the trained model
 model = load_model('./training/TSR_Augmented.h5')
@@ -24,11 +25,10 @@ classes = {
     41:'End of no passing', 42:'End no passing veh > 3.5 tons' 
 }
 
-# 3. CLAHE setup — must match training preprocessing exactly
+# 3. CLAHE setup
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
 def apply_clahe(image_array):
-    """Apply CLAHE to each RGB channel — same as training pipeline."""
     channels = cv2.split(image_array)
     equalized = [clahe.apply(ch) for ch in channels]
     return cv2.merge(equalized)
@@ -41,6 +41,7 @@ window_name = "Real-Time Traffic Sign Recognition"
 frame_count = 0
 last_class_id = -1
 last_confidence = 0.0
+prediction_buffer = deque(maxlen=5)  # ✅ NEW — stores last 5 predictions
 
 print("App Started. Hold sign in green box. Press 'q' or click 'X' to exit.")
 
@@ -58,24 +59,28 @@ while True:
     x2, y2 = (width // 2 + box_size // 2), (height // 2 + box_size // 2)
     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-    # PREPROCESSING & PREDICTION 
-    # Only run the heavy math every 10th frame
+    # PREPROCESSING & PREDICTION
     if frame_count % 10 == 0:
         crop_img = frame[y1:y2, x1:x2]
 
         if crop_img.size > 0:
-            img_rgb     = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)        # BGR → RGB
-            img_resized = np.array(Image.fromarray(img_rgb).resize((64, 64)))  # resize
-            img_clahe   = apply_clahe(img_resized)                         # ✅ CLAHE
-            img_normalized = img_clahe.astype('float32') / 255.0           # normalize
-            img_batch   = np.expand_dims(img_normalized, axis=0)
+            img_rgb        = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
+            img_resized    = np.array(Image.fromarray(img_rgb).resize((64, 64)))
+            img_clahe      = apply_clahe(img_resized)
+            img_normalized = img_clahe.astype('float32') / 255.0
+            img_batch      = np.expand_dims(img_normalized, axis=0)
 
-            # Predict and store results
-            predictions = model.predict(img_batch, verbose=0)
-            last_class_id = np.argmax(predictions, axis=-1)[0]
-            last_confidence = np.max(predictions)
+            predictions      = model.predict(img_batch, verbose=0)
+            last_class_id    = np.argmax(predictions, axis=-1)[0]
+            last_confidence  = np.max(predictions)
 
-    # DISPLAY LOGIC 
+            prediction_buffer.append(last_class_id)  # ✅ NEW — add to buffer
+
+    # ✅ NEW — majority vote across last 5 predictions
+    if len(prediction_buffer) == 5:
+        last_class_id = Counter(prediction_buffer).most_common(1)[0][0]
+
+    # DISPLAY LOGIC
     if last_confidence > 0.80:
         label_text = f"{classes[last_class_id]} ({round(last_confidence*100, 2)}%)"
         cv2.putText(frame, label_text, (x1, y1 - 10),
