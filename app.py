@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from keras.models import load_model
 from PIL import Image
-from collections import deque, Counter  # ✅ NEW IMPORT ADDED
+from collections import deque, Counter  
 
 # 1. Load the trained model
 model = load_model('./training/TSR_Augmented.h5')
@@ -41,7 +41,7 @@ window_name = "Real-Time Traffic Sign Recognition"
 frame_count = 0
 last_class_id = -1
 last_confidence = 0.0
-prediction_buffer = deque(maxlen=5)  # ✅ NEW — stores last 5 predictions
+prediction_buffer = deque(maxlen=5)  # stores last 5 predictions
 
 print("App Started. Hold sign in green box. Press 'q' or click 'X' to exit.")
 
@@ -74,9 +74,9 @@ while True:
             last_class_id    = np.argmax(predictions, axis=-1)[0]
             last_confidence  = np.max(predictions)
 
-            prediction_buffer.append(last_class_id)  # ✅ NEW — add to buffer
+            prediction_buffer.append(last_class_id)  # add to buffer
 
-    # ✅ NEW — majority vote across last 5 predictions
+    # majority vote across last 5 predictions
     if len(prediction_buffer) == 5:
         last_class_id = Counter(prediction_buffer).most_common(1)[0][0]
 
